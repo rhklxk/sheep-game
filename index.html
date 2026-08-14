@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="google" content="notranslate">
   <meta http-equiv="Content-Language" content="en">
+  <meta name="referrer" content="no-referrer-when-downgrade">
   <title>Sheep Stack — Match 3 Puzzle</title>
   <style>
 * {
@@ -168,6 +169,10 @@ html, body {
 .tile-type-5 { background: linear-gradient(145deg, #55efc4, #00b894); }
 .tile-type-6 { background: linear-gradient(145deg, #74b9ff, #0984e3); }
 .tile-type-7 { background: linear-gradient(145deg, #dfe6e9, #b2bec3); }
+.tile-type-8 { background: linear-gradient(145deg, #ffeaa7, #f9ca24); }
+.tile-type-9 { background: linear-gradient(145deg, #ce93d8, #8e44ad); }
+.tile-type-10 { background: linear-gradient(145deg, #81ecec, #00b894); }
+.tile-type-11 { background: linear-gradient(145deg, #ffb347, #ff7f50); }
 
 /* Tray */
 .tray-section {
@@ -375,6 +380,21 @@ html, body {
   }
 }
 
+/* Fireworks */
+#fireworks-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10000;
+  display: none;
+}
+
+#fireworks-canvas.active {
+  display: block;
+}
+
 </style>
 </head>
 <body translate="no">
@@ -387,7 +407,7 @@ html, body {
     <div class="stats-bar">
       <div class="stat">
         <span class="stat-label">Level</span>
-        <span id="level-display" class="stat-value">1</span>
+        <span id="level-display" class="stat-value">1/20</span>
       </div>
       <div class="stat">
         <span class="stat-label">Tiles Left</span>
@@ -428,7 +448,8 @@ html, body {
           <li>Tap <strong>uncovered</strong> tiles to move them to the tray</li>
           <li>Match <strong>3 identical</strong> tiles to remove them</li>
           <li>Tray holds max <strong>7 tiles</strong> — don't let it overflow!</li>
-          <li>Use <strong>Shuffle</strong> and <strong>Undo</strong> wisely (3 each)</li>
+          <li>Use <strong>Shuffle</strong> and <strong>Undo</strong> wisely — fewer on hard levels!</li>
+          <li>Beat all <strong>20 levels</strong> to become a champion!</li>
         </ul>
         <button id="btn-start" class="btn btn-primary btn-large">Play Now</button>
       </div>
@@ -458,25 +479,134 @@ html, body {
     </div>
   </div>
 
+  <canvas id="fireworks-canvas" aria-hidden="true"></canvas>
+
   <script>
 /**
  * Sheep Stack - A Yang Le Ge Yang style tile matching puzzle
  * No login required - play instantly in browser
  */
 
-const TILE_ICONS = ['🐑', '🌿', '🌸', '🍎', '🥕', '⭐', '🌙', '☁️'];
+const TILE_ICONS = ['🐑', '🌿', '🌸', '🍎', '🥕', '⭐', '🌙', '☁️', '🌻', '🍇', '🦋', '🎃'];
 const TRAY_MAX = 7;
 const TILE_SIZE = 52;
 const TILE_GAP = 4;
 
-// Level configurations: [tileTypes, layers, tilesPerType multiplier]
+// Level configurations — 20 levels, steep difficulty curve
 const LEVELS = [
-  { types: 4, layers: 3, density: 3, name: 'Meadow' },
-  { types: 5, layers: 4, density: 3, name: 'Hillside' },
-  { types: 6, layers: 5, density: 3, name: 'Mountain' },
-  { types: 7, layers: 6, density: 3, name: 'Summit' },
-  { types: 8, layers: 7, density: 3, name: 'Sky' },
+  { types: 5, layers: 5, density: 5, name: 'Meadow',    shuffles: 2, undos: 2, pack: 0.48, blockOverlap: 0.32, layerShift: 2.5 },
+  { types: 6, layers: 5, density: 5, name: 'Hillside',  shuffles: 2, undos: 2, pack: 0.47, blockOverlap: 0.31, layerShift: 2.5 },
+  { types: 6, layers: 6, density: 6, name: 'Garden',    shuffles: 2, undos: 1, pack: 0.47, blockOverlap: 0.30, layerShift: 2.2 },
+  { types: 7, layers: 6, density: 6, name: 'Forest',    shuffles: 1, undos: 1, pack: 0.46, blockOverlap: 0.30, layerShift: 2.2 },
+  { types: 7, layers: 7, density: 6, name: 'Creek',     shuffles: 1, undos: 1, pack: 0.46, blockOverlap: 0.29, layerShift: 2.0 },
+  { types: 8, layers: 7, density: 7, name: 'Mountain',  shuffles: 1, undos: 1, pack: 0.45, blockOverlap: 0.29, layerShift: 2.0 },
+  { types: 8, layers: 8, density: 7, name: 'Valley',    shuffles: 1, undos: 1, pack: 0.45, blockOverlap: 0.28, layerShift: 2.0 },
+  { types: 9, layers: 8, density: 8, name: 'Summit',    shuffles: 1, undos: 1, pack: 0.44, blockOverlap: 0.28, layerShift: 1.8 },
+  { types: 9, layers: 9, density: 8, name: 'Cloud',     shuffles: 1, undos: 0, pack: 0.44, blockOverlap: 0.27, layerShift: 1.8 },
+  { types: 10, layers: 9, density: 8, name: 'Sky',     shuffles: 1, undos: 0, pack: 0.43, blockOverlap: 0.27, layerShift: 1.8 },
+  { types: 10, layers: 10, density: 9, name: 'Storm',  shuffles: 1, undos: 0, pack: 0.43, blockOverlap: 0.26, layerShift: 1.6 },
+  { types: 11, layers: 10, density: 9, name: 'Aurora', shuffles: 0, undos: 0, pack: 0.42, blockOverlap: 0.26, layerShift: 1.6 },
+  { types: 11, layers: 11, density: 9, name: 'Nebula', shuffles: 0, undos: 0, pack: 0.42, blockOverlap: 0.25, layerShift: 1.5 },
+  { types: 12, layers: 11, density: 10, name: 'Galaxy', shuffles: 0, undos: 0, pack: 0.41, blockOverlap: 0.25, layerShift: 1.5 },
+  { types: 12, layers: 12, density: 10, name: 'Void',   shuffles: 0, undos: 0, pack: 0.41, blockOverlap: 0.24, layerShift: 1.4 },
+  { types: 12, layers: 12, density: 11, name: 'Abyss',  shuffles: 0, undos: 0, pack: 0.40, blockOverlap: 0.24, layerShift: 1.4 },
+  { types: 12, layers: 13, density: 11, name: 'Chaos',  shuffles: 0, undos: 0, pack: 0.40, blockOverlap: 0.23, layerShift: 1.3 },
+  { types: 12, layers: 13, density: 12, name: 'Nightmare', shuffles: 0, undos: 0, pack: 0.39, blockOverlap: 0.23, layerShift: 1.3 },
+  { types: 12, layers: 14, density: 12, name: 'Inferno',   shuffles: 0, undos: 0, pack: 0.38, blockOverlap: 0.22, layerShift: 1.2 },
+  { types: 12, layers: 14, density: 13, name: 'Legend',    shuffles: 0, undos: 0, pack: 0.38, blockOverlap: 0.22, layerShift: 1.2 },
 ];
+
+class Fireworks {
+  constructor(canvasId) {
+    this.canvas = document.getElementById(canvasId);
+    if (!this.canvas) return;
+    this.ctx = this.canvas.getContext('2d');
+    this.particles = [];
+    this.running = false;
+    this.raf = null;
+    this.launchTimer = null;
+    this.resize = this.resize.bind(this);
+    window.addEventListener('resize', this.resize);
+    this.resize();
+  }
+
+  resize() {
+    if (!this.canvas) return;
+    this.canvas.width = window.innerWidth;
+    this.canvas.height = window.innerHeight;
+  }
+
+  start(intense = false) {
+    if (!this.canvas || this.running) return;
+    this.running = true;
+    this.intense = intense;
+    this.canvas.classList.add('active');
+    this.scheduleLaunch();
+    this.animate();
+  }
+
+  scheduleLaunch() {
+    if (!this.running) return;
+    const x = Math.random() * this.canvas.width * 0.75 + this.canvas.width * 0.125;
+    const y = Math.random() * this.canvas.height * 0.35 + this.canvas.height * 0.08;
+    this.explode(x, y);
+    if (this.intense) {
+      setTimeout(() => this.explode(x + (Math.random() - 0.5) * 120, y - 30), 120);
+    }
+    const delay = this.intense ? 280 + Math.random() * 400 : 450 + Math.random() * 550;
+    this.launchTimer = setTimeout(() => this.scheduleLaunch(), delay);
+  }
+
+  explode(x, y) {
+    const colors = ['#ff6b6b', '#ffd93d', '#6bcb77', '#4d96ff', '#ff6bd6', '#ffffff', '#ff9f43', '#a29bfe'];
+    const count = 36 + Math.floor(Math.random() * 28);
+    for (let i = 0; i < count; i++) {
+      const angle = (Math.PI * 2 * i) / count + Math.random() * 0.4;
+      const speed = 1.8 + Math.random() * 4.5;
+      this.particles.push({
+        x, y,
+        vx: Math.cos(angle) * speed,
+        vy: Math.sin(angle) * speed,
+        life: 1,
+        decay: 0.01 + Math.random() * 0.012,
+        color: colors[Math.floor(Math.random() * colors.length)],
+        size: 2 + Math.random() * 3.5,
+      });
+    }
+  }
+
+  animate() {
+    if (!this.running) return;
+    this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    this.particles = this.particles.filter(p => p.life > 0);
+
+    for (const p of this.particles) {
+      p.x += p.vx;
+      p.y += p.vy;
+      p.vy += 0.06;
+      p.vx *= 0.99;
+      p.life -= p.decay;
+      this.ctx.globalAlpha = Math.max(0, p.life);
+      this.ctx.fillStyle = p.color;
+      this.ctx.beginPath();
+      this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+      this.ctx.fill();
+    }
+    this.ctx.globalAlpha = 1;
+    this.raf = requestAnimationFrame(() => this.animate());
+  }
+
+  stop() {
+    this.running = false;
+    if (this.launchTimer) clearTimeout(this.launchTimer);
+    if (this.raf) cancelAnimationFrame(this.raf);
+    this.particles = [];
+    if (this.canvas) {
+      this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+      this.canvas.classList.remove('active');
+    }
+  }
+}
 
 class SheepStackGame {
   constructor() {
@@ -501,6 +631,7 @@ class SheepStackGame {
     this.startScreen = document.getElementById('start-screen');
     this.winScreen = document.getElementById('win-screen');
     this.loseScreen = document.getElementById('lose-screen');
+    this.fireworks = new Fireworks('fireworks-canvas');
 
     this.bindEvents();
     this.initTraySlots();
@@ -534,8 +665,9 @@ class SheepStackGame {
     this.hideAllOverlays();
     this.tray = [];
     this.history = [];
-    this.shufflesLeft = 3;
-    this.undosLeft = 3;
+    const config = this.getLevelConfig();
+    this.shufflesLeft = config.shuffles;
+    this.undosLeft = config.undos;
     this.isPlaying = true;
     this.tileIdCounter = 0;
 
@@ -548,9 +680,8 @@ class SheepStackGame {
   }
 
   nextLevel() {
-    this.level = Math.min(this.level + 1, LEVELS.length);
-    this.shufflesLeft = 3;
-    this.undosLeft = 3;
+    if (this.level >= LEVELS.length) return;
+    this.level += 1;
     this.startGame();
   }
 
@@ -586,15 +717,16 @@ class SheepStackGame {
     const rows = Math.floor((boardRect.height - TILE_SIZE) / (TILE_SIZE * 0.55));
 
     let poolIndex = 0;
+    const layerShift = config.layerShift ?? 2;
     for (let layer = 0; layer < layers && poolIndex < pool.length; layer++) {
-      const layerOffset = layer * 3;
+      const layerOffset = layer * layerShift;
       const tilesInLayer = Math.min(
-        Math.ceil(pool.length / layers),
+        Math.ceil(pool.length / layers) + (layer < 3 ? 1 : 0),
         pool.length - poolIndex
       );
 
       const positions = this.generateLayerPositions(
-        cols, rows, tilesInLayer, layerOffset, boardRect
+        cols, rows, tilesInLayer, layerOffset, boardRect, config.pack
       );
 
       for (let i = 0; i < positions.length && poolIndex < pool.length; i++) {
@@ -610,16 +742,16 @@ class SheepStackGame {
       }
     }
 
-    // Place any remaining tiles
+    // Place any remaining tiles (stack on top layers for extra chaos)
     while (poolIndex < pool.length) {
-      const layer = layers - 1;
-      const x = 20 + Math.random() * (boardRect.width - TILE_SIZE - 40);
-      const y = 20 + Math.random() * (boardRect.height - TILE_SIZE - 40);
+      const layer = layers - 1 + Math.floor(poolIndex / 6);
+      const x = 10 + Math.random() * (boardRect.width - TILE_SIZE - 20);
+      const y = 10 + Math.random() * (boardRect.height - TILE_SIZE - 20);
       this.tiles.push({
         id: this.tileIdCounter++,
         type: pool[poolIndex++],
         x, y,
-        layer: layer + Math.floor(Math.random() * 2),
+        layer,
         removed: false,
       });
     }
@@ -633,10 +765,10 @@ class SheepStackGame {
     };
   }
 
-  generateLayerPositions(cols, rows, count, offset, boardRect) {
+  generateLayerPositions(cols, rows, count, offset, boardRect, pack = 0.5) {
     const positions = [];
-    const gridW = TILE_SIZE * 0.55;
-    const gridH = TILE_SIZE * 0.55;
+    const gridW = TILE_SIZE * pack;
+    const gridH = TILE_SIZE * pack;
     const startX = (boardRect.width - cols * gridW) / 2;
     const startY = (boardRect.height - rows * gridH) / 2;
 
@@ -652,12 +784,13 @@ class SheepStackGame {
 
     this.shuffleArray(allCells);
 
-    // Slight random offset for natural look
+    // Slight random offset — less on hard levels for denser stacks
+    const jitter = pack < 0.42 ? 4 : 8;
     for (let i = 0; i < Math.min(count, allCells.length); i++) {
       const cell = allCells[i];
       positions.push({
-        x: cell.x + (Math.random() - 0.5) * 8,
-        y: cell.y + (Math.random() - 0.5) * 8,
+        x: cell.x + (Math.random() - 0.5) * jitter,
+        y: cell.y + (Math.random() - 0.5) * jitter,
       });
     }
 
@@ -675,11 +808,12 @@ class SheepStackGame {
   isTileBlocked(tile) {
     if (tile.removed) return true;
 
+    const config = this.getLevelConfig();
     const tileLeft = tile.x;
     const tileRight = tile.x + TILE_SIZE;
     const tileTop = tile.y;
     const tileBottom = tile.y + TILE_SIZE;
-    const overlapThreshold = TILE_SIZE * 0.35;
+    const overlapThreshold = TILE_SIZE * (config.blockOverlap ?? 0.30);
 
     for (const other of this.tiles) {
       if (other.removed || other.id === tile.id) continue;
@@ -777,12 +911,25 @@ class SheepStackGame {
       this.isPlaying = false;
       this.score += 100 * this.level;
       document.getElementById('final-score').textContent = this.score;
-      document.getElementById('win-message').textContent =
-        `Level ${this.level} (${this.getLevelConfig().name}) cleared!`;
+
+      const isFinalLevel = this.level >= LEVELS.length;
+      const winTitle = document.querySelector('#win-screen h2');
+      if (isFinalLevel) {
+        winTitle.textContent = '🏆 Champion!';
+        document.getElementById('win-message').textContent =
+          `You conquered all ${LEVELS.length} levels! Legendary!`;
+      } else {
+        winTitle.textContent = 'You Win!';
+        document.getElementById('win-message').textContent =
+          `Level ${this.level} (${this.getLevelConfig().name}) cleared!`;
+      }
+
       this.winScreen.classList.remove('hidden');
+      this.fireworks.start(isFinalLevel);
 
       const nextBtn = document.getElementById('btn-next-level');
-      nextBtn.style.display = this.level < LEVELS.length ? 'flex' : 'none';
+      nextBtn.style.display = isFinalLevel ? 'none' : 'flex';
+      nextBtn.textContent = this.level < LEVELS.length ? 'Next Level' : 'Play Again';
       return;
     }
 
@@ -874,7 +1021,7 @@ class SheepStackGame {
 
   updateUI() {
     const remaining = this.tiles.filter(t => !t.removed).length;
-    this.levelDisplay.textContent = this.level;
+    this.levelDisplay.textContent = `${this.level}/${LEVELS.length}`;
     this.tilesLeftDisplay.textContent = remaining;
     this.scoreDisplay.textContent = this.score;
     this.shuffleCountEl.textContent = this.shufflesLeft;
@@ -885,6 +1032,7 @@ class SheepStackGame {
   }
 
   hideAllOverlays() {
+    this.fireworks.stop();
     this.startScreen.classList.add('hidden');
     this.winScreen.classList.add('hidden');
     this.loseScreen.classList.add('hidden');
